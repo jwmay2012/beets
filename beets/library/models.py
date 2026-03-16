@@ -5,7 +5,6 @@ import string
 import sys
 import time
 import unicodedata
-from contextlib import suppress
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -13,7 +12,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from mediafile import MediaFile, UnreadableFileError
 
 import beets
-from beets import dbcore, logging, plugins, util
+from beets import context, dbcore, logging, plugins, util
 from beets.dbcore import types
 from beets.util import (
     MoveOperation,
@@ -93,11 +92,8 @@ class LibModel(dbcore.Model["Library"]):
             # Store paths relative to the music directory
             # Check for absolute path because item may be initialised with
             # a relative path already
-            if os.path.isabs(value):
-                # Suppress these errors since tests may initialise an Item
-                # without the db attribute
-                with suppress(ValueError, AttributeError):
-                    value = os.path.relpath(value, self.db.directory)
+            if os.path.isabs(value) and (music_dir := context.get_music_dir()):
+                value = os.path.relpath(value, music_dir)
 
         return super()._setitem(key, value)
 
@@ -105,10 +101,7 @@ class LibModel(dbcore.Model["Library"]):
         value = super().__getitem__(key)
         if key == "path" and value:
             # Return absolute paths.
-            # Suppress these errors since tests may initialise an Item
-            # without the db attribute
-            with suppress(ValueError, AttributeError):
-                value = os.path.join(self.db.directory, value)
+            value = normpath(os.path.join(context.get_music_dir(), value))
 
         return value
 
