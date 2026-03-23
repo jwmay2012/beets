@@ -9,9 +9,15 @@ below!
 Unreleased
 ----------
 
-..
-    New features
-    ~~~~~~~~~~~~
+New features
+~~~~~~~~~~~~
+
+- Item and album-art paths are now stored relative to the library root in the
+  database while remaining absolute in the rest of beets. Path queries now match
+  both library-relative paths and absolute paths under the currently configured
+  music directory under the new storage model. The existing paths in the
+  database are migrated automatically the first time you run any ``beet``
+  command after the update. :bug:`133`
 
 ..
     Bug fixes
