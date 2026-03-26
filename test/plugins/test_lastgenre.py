@@ -14,9 +14,7 @@
 
 """Tests for the 'lastgenre' plugin."""
 
-import os
 import re
-import tempfile
 from collections import defaultdict
 from unittest.mock import Mock, patch
 
@@ -809,85 +807,80 @@ def test_ignorelist_literal_fallback_uses_fullmatch(config):
 
 
 @pytest.mark.parametrize(
-    "file_content, expected_ignorelist",
+    "ignorelist_config, expected_ignorelist",
     [
-        # Basic artist with pattern
-        ("metallica:\n    metal", {"metallica": ["metal"]}),
-        # Global ignorelist
-        ("*:\n    spoken word", {"*": ["spoken word"]}),
+        # Basic artist with single pattern
+        ({"metallica": ["metal"]}, {"metallica": ["metal"]}),
+        # Global ignorelist with '*' key
+        ({"*": ["spoken word"]}, {"*": ["spoken word"]}),
         # Multiple patterns per artist
         (
-            "metallica:\n    metal\n    .*rock.*",
+            {"metallica": ["metal", ".*rock.*"]},
             {"metallica": ["metal", ".*rock.*"]},
         ),
-        # Comments and empty lines skipped
+        # Combined global and artist-specific
         (
-            "# comment\n*:\n    spoken word\n\nmetallica:\n    metal",
+            {"*": ["spoken word"], "metallica": ["metal"]},
             {"*": ["spoken word"], "metallica": ["metal"]},
         ),
-        # Case insensitive artist names — key lowercased, pattern kept as-is
+        # Artist names are lowercased; patterns are kept as-is
         # (patterns compiled with re.IGNORECASE so case doesn't matter for matching)
-        ("METALLICA:\n    METAL", {"metallica": ["METAL"]}),
-        # Invalid regex pattern that gets escaped
-        ("artist:\n    [invalid(regex", {"artist": ["\\[invalid\\(regex"]}),
-        # Empty file
-        ("", {}),
+        ({"METALLICA": ["METAL"]}, {"metallica": ["METAL"]}),
+        # Invalid regex pattern that gets escaped (full-match literal fallback)
+        ({"artist": ["[invalid(regex"]}, {"artist": ["\\[invalid\\(regex"]}),
+        # Disabled via False / empty dict — both produce empty dict
+        (False, {}),
+        ({}, {}),
     ],
 )
-def test_ignorelist_file_format(config, file_content, expected_ignorelist):
-    """Test ignorelist file format parsing."""
+def test_ignorelist_config_format(
+    config, ignorelist_config, expected_ignorelist
+):
+    """Test ignorelist parsing from beets config (dict-based)."""
+    config["lastgenre"]["ignorelist"] = ignorelist_config
+    plugin = lastgenre.LastGenrePlugin()
 
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".txt", delete=False, encoding="utf-8"
-    ) as f:
-        f.write(file_content)
-        ignorelist_file = f.name
+    # Convert compiled regex patterns back to strings for comparison
+    string_ignorelist = {
+        artist: [p.pattern for p in patterns]
+        for artist, patterns in plugin.ignorelist.items()
+    }
 
-    try:
-        config["lastgenre"]["ignorelist"] = ignorelist_file
-        plugin = lastgenre.LastGenrePlugin()
-
-        # Convert compiled regex patterns back to strings for comparison
-        string_ignorelist = {
-            artist: [p.pattern for p in patterns]
-            for artist, patterns in plugin.ignorelist.items()
-        }
-
-        assert string_ignorelist == expected_ignorelist
-
-    finally:
-        os.unlink(ignorelist_file)
+    assert string_ignorelist == expected_ignorelist
 
 
 @pytest.mark.parametrize(
-    "invalid_content, expected_error_message",
+    "invalid_config, expected_error_message",
     [
-        # Missing colon
-        ("metallica\n    metal", "Malformed ignorelist section header"),
-        # Pattern before section
-        ("    metal\nmetallica:\n    heavy metal", "before any section header"),
-        # Unindented pattern
-        ("metallica:\nmetal", "Malformed ignorelist section header"),
+        # A plain string (e.g. accidental file path) instead of a mapping
+        (
+            "/path/to/ignorelist.txt",
+            "expected a mapping",
+        ),
+        # An integer instead of a mapping
+        (
+            42,
+            "expected a mapping",
+        ),
+        # A list of strings instead of a mapping
+        (
+            ["spoken word", "comedy"],
+            "expected a mapping",
+        ),
+        # A mapping with a non-list value
+        (
+            {"metallica": "metal"},
+            "expected a list of patterns",
+        ),
     ],
 )
-def test_ignorelist_file_format_errors(
-    config, invalid_content, expected_error_message
+def test_ignorelist_config_format_errors(
+    config, invalid_config, expected_error_message
 ):
-    """Test ignorelist file format error handling."""
+    """Test ignorelist config validation error handling."""
+    config["lastgenre"]["ignorelist"] = invalid_config
 
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".txt", delete=False, encoding="utf-8"
-    ) as f:
-        f.write(invalid_content)
-        ignorelist_file = f.name
+    with pytest.raises(UserError) as exc_info:
+        lastgenre.LastGenrePlugin()
 
-    try:
-        config["lastgenre"]["ignorelist"] = ignorelist_file
-
-        with pytest.raises(UserError) as exc_info:
-            lastgenre.LastGenrePlugin()
-
-        assert expected_error_message in str(exc_info.value)
-
-    finally:
-        os.unlink(ignorelist_file)
+    assert expected_error_message in str(exc_info.value)

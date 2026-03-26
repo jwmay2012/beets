@@ -58,7 +58,7 @@ if TYPE_CHECKING:
     Example: [['electronic', 'house'], ['electronic', 'techno']]"""
 
     RawIgnorelist = dict[str, list[str]]
-    """Mapping of artist name to list of raw regex/string patterns."""
+    """Mapping of artist name (lowercased) to list of raw regex/string patterns."""
 
 
 # Canonicalization tree processing.
@@ -199,75 +199,50 @@ class LastGenrePlugin(plugins.BeetsPlugin):
         return c14n_branches, canonicalize
 
     def _load_ignorelist(self) -> Ignorelist:
-        """Load the genre ignorelist from a configured file path.
+        """Load the genre ignorelist from the beets config.
 
-        For maximum compatibility with regex patterns, a custom format is used:
-        - Each section starts with an artist name, followed by a colon.
-        - Subsequent lines are indented (at least one space, typically 4 spaces)
-          and contain a regex pattern to match a genre or a literal genre name.
-        - A '*' key for artist can be used to specify global forbidden genres.
+        Reads ``lastgenre.ignorelist`` as a mapping of artist names to lists
+        of regex / literal genre patterns.  Use the quoted ``'*'`` key to
+        define globally ignored genres::
 
-        Returns a compiled ignorelist dictionary mapping artist names to lists of
-        case-insensitive regex patterns. Returns empty dict if not configured.
+            lastgenre:
+                ignorelist:
+                    '*':
+                        - spoken word
+                        - comedy
+                    Artist Name:
+                        - .*rock.*
+                        - .*metal.*
 
-        Example ignorelist file format::
+        Artist names are matched case-insensitively.  Each pattern is tried as
+        a regex full-match first; if it is not valid regex it is treated as a
+        literal string.  All patterns are case-insensitive.
 
-            Artist Name:
-                .*rock.*
-                .*metal.*
-            Another Artist Name:
-                ^jazz$
-            *:
-                spoken word
-                comedy
+        Returns an empty dict if ``ignorelist`` is not configured (``no`` /
+        ``false``).
 
         Raises:
-            UserError: if the ignorelist file cannot be read or if the file
-            format is invalid.
+            UserError: if the config value is not a mapping, or if an entry's
+            value is not a list of strings.
         """
-        ignorelist_raw: RawIgnorelist = defaultdict(list)
-        ignorelist_file = self.config["ignorelist"].get()
-        if not ignorelist_file:
+        ignorelist_config = self.config["ignorelist"].get()
+        if not ignorelist_config:
             return {}
-        if not isinstance(ignorelist_file, str):
+        if not isinstance(ignorelist_config, dict):
             raise UserError(
-                "Invalid value for lastgenre.ignorelist: expected path string "
-                f"or 'no', got {ignorelist_file!r}"
+                "Invalid value for lastgenre.ignorelist: expected a mapping "
+                f"(artist \u2192 list of patterns), got {ignorelist_config!r}"
             )
 
-        self._log.debug("Loading ignorelist file {}", ignorelist_file)
-        section = None
-        try:
-            with Path(ignorelist_file).expanduser().open(encoding="utf-8") as f:
-                for lineno, line in enumerate(f, 1):
-                    if not line.strip() or line.lstrip().startswith("#"):
-                        continue
-                    if not line.startswith(" "):
-                        # Section header
-                        header = line.strip().lower()
-                        if not header.endswith(":"):
-                            raise UserError(
-                                f"Malformed ignorelist section header "
-                                f"at line {lineno}"
-                            )
-                        section = header[:-1].rstrip()
-                        if not section:
-                            raise UserError(
-                                f"Empty ignorelist section name "
-                                f"at line {lineno}"
-                            )
-                    else:
-                        # Pattern line: must be indented (at least one space)
-                        if section is None:
-                            raise UserError(
-                                f"Ignorelist pattern line before any section header "
-                                f"at line {lineno}"
-                            )
-                        ignorelist_raw[section].append(line.strip())
-        except OSError as exc:
-            raise UserError(
-                f"Cannot read ignorelist file {ignorelist_file!r}: {exc}"
-            ) from exc
+        ignorelist_raw: RawIgnorelist = {}
+        for artist, patterns in ignorelist_config.items():
+            if not isinstance(patterns, list):
+                raise UserError(
+                    f"Invalid lastgenre.ignorelist entry for {artist!r}: "
+                    f"expected a list of patterns, got {patterns!r}"
+                )
+            ignorelist_raw[str(artist).lower()] = [str(p) for p in patterns]
+
         self._log.extra_debug("Ignorelist: {}", ignorelist_raw)
         return self._compile_ignorelist_patterns(ignorelist_raw)
 
