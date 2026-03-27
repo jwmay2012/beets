@@ -218,6 +218,10 @@ class LastGenrePlugin(plugins.BeetsPlugin):
         a regex full-match first; if it is not valid regex it is treated as a
         literal string.  All patterns are case-insensitive.
 
+        **Note:** Because patterns are parsed as plain YAML scalars,
+        backslashes (e.g. ``\w``) should **not** be double-escaped, and
+        single/double quotes should be avoided.
+
         Returns an empty dict if ``ignorelist`` is not configured (``no`` /
         ``false``).
 
