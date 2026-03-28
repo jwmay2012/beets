@@ -301,12 +301,16 @@ class DiscogsPlugin(SearchApiMetadataSourcePlugin[IDResponse]):
             most_common, _count = util.plurality(
                 item.get(tag) for item in items
             )
-            if most_common is None:
+            if not most_common:
                 continue
 
             value = str(most_common)
             if tag == "catalognum":
                 value = value.replace(" ", "")
+
+            # Skip zero/empty values that would over-constrain the search
+            if not value or value == "0":
+                continue
 
             filters[api_field] = value
 
