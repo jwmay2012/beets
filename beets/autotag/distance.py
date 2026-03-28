@@ -544,7 +544,20 @@ def distance(
         dist.add("tracks", dist.tracks[track].distance)
 
     # Missing tracks.
-    for _ in range(len(album_info.tracks) - len(item_info_pairs)):
+    # For multi-disc releases, check if items match a complete single disc.
+    # If so, tracks from other discs aren't truly "missing" — they're just
+    # the other disc(s) that weren't ripped in this session.
+    missing = len(album_info.tracks) - len(item_info_pairs)
+    if missing > 0 and album_info.mediums and album_info.mediums > 1:
+        tracks_per_medium: dict[int, int] = {}
+        for t in album_info.tracks:
+            m = t.medium or 1
+            tracks_per_medium[m] = tracks_per_medium.get(m, 0) + 1
+        if len(items) in tracks_per_medium.values():
+            # Items match a full disc — don't penalize missing tracks
+            missing = 0
+
+    for _ in range(missing):
         dist.add("missing_tracks", 1.0)
 
     # Unmatched tracks.
