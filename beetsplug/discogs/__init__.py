@@ -275,7 +275,7 @@ class DiscogsPlugin(SearchApiMetadataSourcePlugin[IDResponse]):
         names and medium suffixes that can reduce recall.
         """
 
-        query = f"{artist} {name}" if va_likely else name
+        query = name
         # Strip non-word characters from query. Things like "!" and "-" can
         # cause a query to return no results, even if they match the artist or
         # album title. Use `re.UNICODE` flag to avoid stripping non-english
@@ -286,6 +286,13 @@ class DiscogsPlugin(SearchApiMetadataSourcePlugin[IDResponse]):
         query = re.sub(r"(?i)\b(CD|disc|vinyl)\s*\d+", "", query)
 
         filters: dict[str, str] = {"type": "release"}
+
+        # Pass artist as a structured filter rather than mashing it into the
+        # query string. Discogs' full-text search drowns obscure artists when
+        # combined with generic album names like "Greatest Hits". The artist
+        # filter constrains results to the correct artist first.
+        if artist and not va_likely:
+            filters["artist"] = artist
 
         if not items:
             return query, filters
