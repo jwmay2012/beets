@@ -298,10 +298,18 @@ def tag_album(
                     Proposal(list(candidates.values()), rec),
                 )
 
-        # Search terms.
-        if not (search_artist and search_name):
-            # No explicit search terms -- use current metadata.
-            search_artist, search_name = cur_artist, cur_album
+        # Search terms — fall back to current metadata per-field,
+        # but skip "unknown" values that produce garbage results.
+        if not search_artist:
+            if cur_artist and "unknown" not in cur_artist.lower():
+                search_artist = cur_artist
+            else:
+                search_artist = ""
+        if not search_name:
+            if cur_album and "unknown" not in cur_album.lower():
+                search_name = cur_album
+            else:
+                search_name = ""
         log.debug("Search terms: {} - {}", search_artist, search_name)
 
         # Is this album likely to be a "various artist" release?
