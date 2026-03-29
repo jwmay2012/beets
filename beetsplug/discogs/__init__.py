@@ -322,10 +322,26 @@ class DiscogsPlugin(SearchApiMetadataSourcePlugin[IDResponse]):
         return query, filters
 
     def get_search_response(self, params: SearchParams) -> Sequence[IDResponse]:
-        """Search Discogs releases and return raw result mappings with IDs."""
+        """Search Discogs releases and return raw result mappings with IDs.
+
+        When barcode is in filters, also does a barcode-only search and
+        combines results. This catches exact barcode matches even when the
+        artist/album name is wrong or misspelled.
+        """
         results = self.discogs_client.search(params.query, **params.filters)
         results.per_page = params.limit
-        return [r.data for r in results.page(1)]
+        page = [r.data for r in results.page(1)]
+
+        if "barcode" in params.filters:
+            seen_ids = {r.get("id") for r in page}
+            barcode_only = {"type": "release", "barcode": params.filters["barcode"]}
+            bc_results = self.discogs_client.search("", **barcode_only)
+            bc_results.per_page = params.limit
+            for r in bc_results.page(1):
+                if r.data.get("id") not in seen_ids:
+                    page.append(r.data)
+
+        return page
 
     @cache
     def get_master_year(self, master_id: str) -> int | None:
