@@ -298,28 +298,19 @@ class DiscogsPlugin(SearchApiMetadataSourcePlugin[IDResponse]):
             return query, filters
 
         for tag, api_field in self.extra_discogs_field_by_tag.items():
-            # Use first non-empty value rather than plurality — tags like
-            # barcode may only be set on some items
-            value = None
-            for item in items:
-                v = str(item.get(tag) or "").strip()
-                if v and v != "0":
-                    value = v
-                    break
-
-            if not value:
-                # Fall back to plurality for tags set on most items
-                most_common, _count = util.plurality(
-                    item.get(tag) for item in items
-                )
-                if most_common:
-                    value = str(most_common).strip()
-
-            if not value or value == "0":
+            most_common, _count = util.plurality(
+                item.get(tag) for item in items
+            )
+            if not most_common:
                 continue
 
+            value = str(most_common).strip()
             if tag == "catalognum":
                 value = value.replace(" ", "")
+
+            # Skip zero/empty values that would over-constrain the search
+            if not value or value == "0":
+                continue
 
             filters[api_field] = value
 
