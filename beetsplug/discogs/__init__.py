@@ -323,6 +323,11 @@ class DiscogsPlugin(SearchApiMetadataSourcePlugin[IDResponse]):
 
             filters[api_field] = value
 
+        # When barcode is in filters, it's specific enough on its own —
+        # drop the album name query to avoid over-constraining
+        if "barcode" in filters:
+            query = ""
+
         return query, filters
 
     def get_search_response(self, params: SearchParams) -> Sequence[IDResponse]:
