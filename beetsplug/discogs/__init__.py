@@ -291,7 +291,9 @@ class DiscogsPlugin(SearchApiMetadataSourcePlugin[IDResponse]):
         # query string. Discogs' full-text search drowns obscure artists when
         # combined with generic album names like "Greatest Hits". The artist
         # filter constrains results to the correct artist first.
-        if artist and not va_likely:
+        # Always add when we have an artist — va_likely is often wrong for
+        # unknown CDs where all tags say "Unknown Artist".
+        if artist:
             filters["artist"] = artist
 
         if not items:
